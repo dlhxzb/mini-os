@@ -1,12 +1,12 @@
 # 感谢
 https://os.phil-opp.com/zh-CN/
 
-### 第一课 no_std
+### 1. no_std
 * 初识no_std，要自行处理panic（panic_handler），在Cargo.toml里配置`panic = "abort"`可禁用栈展开。  
-* `extern "C" fn _start()`作为程序入口，用`#[no_mangle]`防止函数重命名  
+* `#![no_main]`后`extern "C" fn _start()`作为程序入口，用`#[no_mangle]`防止函数重命名  
 * x86_64-unknown-linux-gnu，它包含了 CPU 架构 x86_64 、供应商 unknown 、操作系统 linux 和二进制接口 gnu
 
-### 第二课 最小内核
+### 2. 最小内核
 引导启动过程:
 * 启动时主板ROM固件将会：加电自检，可用内存，CPU及其它硬件预加载
 * 寻找一个可引导的存储介质，启动存储在介质开头的第一阶段引导程序（512字节以内），然后加载更长的第二阶段引导程序
@@ -31,12 +31,20 @@ dependencies引入`bootloader`不需要自己编写引导程序，`cargo bootima
   
 ![Alt text](media/image.png)
   
-### 第三课 VGA字符模式
+### 3.VGA字符模式
 存储器映射输入输出（memory-mapped I/O）可以让我们像操作普通的内存区域一样操作VGA字符缓冲区（0xb8000）  
 为避免编译器优化掉这个看似无用的写操作，引入了volatile crate，实际是封装了core::ptr::write(read)_volatile  
   
 一个字符单元是一个u16，低位u8：ASCII，高位u8：颜色  
 
 lazy_static可用在no_std，once_cell还不行  
-  
+no_std锁有lock_api和spin，这里选用简单易用的spin   
 
+### 4. 测试内核
+使用`custom_test_frameworks`自定义测试框架来应对`no_std`，它的工作原理是收集所有标注了 #[test_case]属性的函数，然后将这个测试函数的列表作为参数传递给用户指定的runner函数（test_runner）。它会生成一个main函数来调用test_runner，但由于`no_main`会忽略main函数，我们需要通过 reexport_test_harness_main属性来将生成的函数的名称更改为与main不同的名称（test_main）。然后自行在_start中调用test_main。  
+关闭操作系统通常实现对电源管理标准的支持，这里取巧用QEMU支持的一种名为 isa-debug-exit 的特殊设备，可指定端口发退出码可退出QEMU。  
+在x86平台上，CPU和外围硬件通信通常有两种方式，内存映射I/O和端口映射I/O。之前用内存映射方式访问VGA文本缓冲区  
+端口映射I/O使用独立的I/O总线来进行通信。每个外围设备都有一个或数个端口号。CPU采用了特殊的in和out指令来和端口通信，这些指令要求一个端口号和一个字节的数据作为参数  
+  
+测试结果输出到串口，再通过bootimage设置串口输出到stdout，很巧妙！  
+  
